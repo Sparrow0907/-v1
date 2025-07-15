@@ -1,39 +1,42 @@
 ﻿using System;
+using System.Collections.Generic;
 using Npgsql;
-
 
 namespace BankingSystemV1
 {
     class Program
     {
-
-
-        static string[] usernames;
-        static string[] passwords;
-        static decimal[] balances;
-        static int userCount = 0;
-        static int maxUsers = 100;
+        static List<string> usernames = new List<string>();
+        static List<string> passwords = new List<string>();
+        static List<decimal> balances = new List<decimal>();
 
         static void Main(string[] args)
         {
-            string connectionString = "Host=localhost;Port=15502;Database=postgres;Username=postgres;Password=15502";
-            usernames = new string[maxUsers];
-            passwords = new string[maxUsers];
-            balances = new decimal[maxUsers];
-            userCount = 0;
+            string connectionString = "Host=localhost;Port=15502;Database=BANK;Username=postgres;Password=15502";
+
+            using (NpgsqlConnection connect = new NpgsqlConnection(connectionString))
+            {
+                try
+                {
+                    connect.Open();
+                    Console.WriteLine("Подключение к базе данных успешно!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка подключения к базе данных: {ex.Message}");
+                }
+            }
 
             bool exit = false;
             while (!exit)
             {
-                Console.WriteLine("Банковская система v1.0");
+                Console.WriteLine("\nБанковская система v1.0");
                 Console.WriteLine("1. Регистрация");
                 Console.WriteLine("2. Вход");
                 Console.WriteLine("3. Выход");
                 Console.Write("Выберите действие: ");
 
-                int choice;
-
-                if (int.TryParse(Console.ReadLine(), out choice))
+                if (int.TryParse(Console.ReadLine(), out int choice))
                 {
                     switch (choice)
                     {
@@ -60,30 +63,34 @@ namespace BankingSystemV1
 
         static void RegisterUser()
         {
-            if (userCount >= maxUsers)
+            Console.Write("Введите имя пользователя: ");
+            string name = Console.ReadLine().Trim();
+
+            if (string.IsNullOrEmpty(name))
             {
-                maxUsers = userCount;
+                Console.WriteLine("Имя пользователя не может быть пустым.");
+                return;
             }
 
-            Console.Write("Введите имя пользователя: ");
-            string username = Console.ReadLine();
-
-            for (int i = 0; i < userCount; i++)
+            // Проверяем на существование пользователя (без учета регистра)
+            if (usernames.Exists(u => u.Equals(name, StringComparison.OrdinalIgnoreCase)))
             {
-                if (usernames[i] == username)
-                {
-                    Console.WriteLine("Пользователь с таким именем уже существует.");
-                    return;
-                }
+                Console.WriteLine("Пользователь с таким именем уже существует!");
+                return;
             }
 
             Console.Write("Введите пароль: ");
             string password = Console.ReadLine();
 
-            usernames[userCount] = username;
-            passwords[userCount] = password;
-            balances[userCount] = 0;
-            userCount++;
+            if (string.IsNullOrEmpty(password))
+            {
+                Console.WriteLine("Пароль не может быть пустым.");
+                return;
+            }
+
+            usernames.Add(name);
+            passwords.Add(password);
+            balances.Add(0);
 
             Console.WriteLine("Регистрация успешна!");
         }
@@ -91,15 +98,16 @@ namespace BankingSystemV1
         static void LoginUser()
         {
             Console.Write("Введите имя пользователя: ");
-            string username = Console.ReadLine();
+            string username = Console.ReadLine().Trim();
 
             Console.Write("Введите пароль: ");
             string password = Console.ReadLine();
 
             int userIndex = -1;
-            for (int i = 0; i < userCount; i++)
+            for (int i = 0; i < usernames.Count; i++)
             {
-                if (usernames[i] == username && passwords[i] == password)
+                if (usernames[i].Equals(username, StringComparison.OrdinalIgnoreCase) &&
+                    passwords[i] == password)
                 {
                     userIndex = i;
                     break;
@@ -108,11 +116,11 @@ namespace BankingSystemV1
 
             if (userIndex == -1)
             {
-                Console.WriteLine("Неверное имя пользователя или пароль.");
+                Console.WriteLine("Неверный логин или пароль");
                 return;
             }
 
-            Console.WriteLine($"\nДобро пожаловать, {username}!");
+            Console.WriteLine($"\nДобро пожаловать, {usernames[userIndex]}!");
             UserMenu(userIndex);
         }
 
@@ -129,8 +137,7 @@ namespace BankingSystemV1
                 Console.WriteLine("4. Выйти из аккаунта");
                 Console.Write("Выберите действие: ");
 
-                int choice;
-                if (int.TryParse(Console.ReadLine(), out choice))
+                if (int.TryParse(Console.ReadLine(), out int choice))
                 {
                     switch (choice)
                     {
@@ -193,36 +200,34 @@ namespace BankingSystemV1
             }
         }
 
-        static void Transfer(int senderIndex)
+        static void Transfer(int userIndex)
         {
             Console.Write("Введите имя получателя: ");
-            string recipientName = Console.ReadLine();
+            string recipientName = Console.ReadLine().Trim();
 
-            int recipientIndex = -1;
-            for (int i = 0; i < userCount; i++)
+            if (recipientName.Equals(usernames[userIndex], StringComparison.OrdinalIgnoreCase))
             {
-                if (usernames[i] == recipientName && i != senderIndex)
-                {
-                    recipientIndex = i;
-                    break;
-                }
+                Console.WriteLine("Нельзя переводить средства самому себе.");
+                return;
             }
+
+            int recipientIndex = usernames.FindIndex(u => u.Equals(recipientName, StringComparison.OrdinalIgnoreCase));
 
             if (recipientIndex == -1)
             {
-                Console.WriteLine("Получатель не найден или вы пытаетесь перевести себе.");
+                Console.WriteLine("Получатель не найден.");
                 return;
             }
 
             Console.Write("Введите сумму для перевода: ");
             if (decimal.TryParse(Console.ReadLine(), out decimal amount) && amount > 0)
             {
-                if (amount <= balances[senderIndex])
+                if (amount <= balances[userIndex])
                 {
-                    balances[senderIndex] -= amount;
+                    balances[userIndex] -= amount;
                     balances[recipientIndex] += amount;
                     Console.WriteLine($"Перевод {amount:C} пользователю {usernames[recipientIndex]} выполнен успешно.");
-                    Console.WriteLine($"Ваш новый баланс: {balances[senderIndex]:C}");
+                    Console.WriteLine($"Ваш новый баланс: {balances[userIndex]:C}");
                 }
                 else
                 {
