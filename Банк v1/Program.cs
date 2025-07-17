@@ -72,7 +72,6 @@ namespace BankingSystemV1
                 return;
             }
 
-            // Проверяем на существование пользователя (без учета регистра)
             if (usernames.Exists(u => u.Equals(name, StringComparison.OrdinalIgnoreCase)))
             {
                 Console.WriteLine("Пользователь с таким именем уже существует!");
